@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RevitAddIns>
+    <AddIn Type="Application">
+        <Name>RevitMcp</Name>
+        <Assembly>RevitMcp\RevitMcp.Addin.dll</Assembly>
+        <AddInId>7E4B1C2A-9D3F-4E6A-8B5C-1F2A3D4E5B6C</AddInId>
+        <FullClassName>RevitMcp.McpApp</FullClassName>
+        <VendorId>HeatLoss</VendorId>
+        <VendorDescription>Revit MCP bridge for OpenCode automation (open model, doc info, run HeatLoss plugin)</VendorDescription>
+    </AddIn>
+</RevitAddIns>

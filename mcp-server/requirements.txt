@@ -1,0 +1,2 @@
+# No third-party dependencies: pure stdlib (json-rpc over stdio).
+# Kept for documentation; nothing to install.

@@ -1,0 +1,14 @@
+{
+  "mcp": {
+    "revit-mcp": {
+      "type": "local",
+      "command": [
+        "python",
+        "-X",
+        "utf8",
+        "E:\\ПлагиныРевит\\RevitMcp\\mcp-server\\server.py"
+      ],
+      "enabled": true
+    }
+  }
+}

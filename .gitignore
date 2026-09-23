@@ -1,0 +1,12 @@
+# Build outputs
+bin/
+obj/
+*.user
+*.suo
+.vs/
+# Python
+__pycache__/
+*.pyc
+.venv/
+# Revit deploy copies (local only)
+*.log
