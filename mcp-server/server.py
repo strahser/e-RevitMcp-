@@ -213,10 +213,16 @@ def main():
             resp = {"error": {"code": -32603, "message": str(e)}}
         if resp is not None:
             if "id" in msg:
-                resp["jsonrpc"] = "2.0"
-                resp["id"] = msg["id"]
-            sys.stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
+                # JSON-RPC 2.0: payload MUST be nested under "result" (or "error").
+                # Without this the official MCP SDK rejects the frame
+                # (invalid_union / expected object at path ["result"]) and
+                # initialize times out, so no tools ever register.
+                if isinstance(resp, dict) and set(resp.keys()) == {"error"}:
+                    out = {"jsonrpc": "2.0", "id": msg["id"], "error": resp["error"]}
+                else:
+                    out = {"jsonrpc": "2.0", "id": msg["id"], "result": resp}
+                sys.stdout.write(json.dumps(out, ensure_ascii=False) + "\n")
+                sys.stdout.flush()
 
 
 if __name__ == "__main__":
