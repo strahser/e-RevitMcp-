@@ -103,6 +103,128 @@ internal class McpHttpServer
             case "GET /levels":
                 WriteJson(ctx, 200, Ok(true, _handler.Run(app => McpOps.Levels(app)), null));
                 return;
+            case "POST /create_level":
+                {
+                    var body = ReadBody(req);
+                    var name = body.Value<string>("name") ?? "Level";
+                    var elev = body.Value<double?>("elevation_mm") ?? 0;
+                    var data = _handler.Run(app => McpOps.CreateLevel(app, name, elev), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /wall_types":
+                WriteJson(ctx, 200, Ok(true, _handler.Run(app => McpOps.ListWallTypes(app)), null));
+                return;
+            case "POST /create_wall_type":
+                {
+                    var body = ReadBody(req);
+                    var name = body.Value<string>("name") ?? "WallType";
+                    var layers = body["layers"] != null ? body["layers"].ToObject<List<Dictionary<string, object>>>() : null;
+                    var data = _handler.Run(app => McpOps.CreateWallType(app, name, layers), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /create_wall":
+                {
+                    var body = ReadBody(req);
+                    var typeId = body.Value<string>("type_id") ?? body.Value<string>("type") ?? "";
+                    var baseLevel = body.Value<string>("base_level") ?? "";
+                    var topLevel = body.Value<string>("top_level") ?? "";
+                    var start = body["start_mm"] != null ? body["start_mm"].ToObject<double[]>() : new[] { 0.0, 0.0 };
+                    var end = body["end_mm"] != null ? body["end_mm"].ToObject<double[]>() : new[] { 1000.0, 0.0 };
+                    var flip = body.Value<bool?>("flip") ?? false;
+                    var data = _handler.Run(app => McpOps.CreateWall(app, typeId, baseLevel, topLevel, start, end, flip), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /cut_opening":
+                {
+                    var body = ReadBody(req);
+                    var host = body.Value<long>("host_wall_id");
+                    var w = body.Value<double?>("width_mm") ?? 1000;
+                    var h = body.Value<double?>("height_mm") ?? 1000;
+                    var sill = body.Value<double?>("sill_mm") ?? 900;
+                    var pos = body.Value<double?>("position_mm") ?? 0;
+                    var data = _handler.Run(app => McpOps.CutOpening(app, host, w, h, sill, pos), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /place_family":
+                {
+                    var body = ReadBody(req);
+                    var fam = body.Value<string>("family") ?? "";
+                    var type = body.Value<string>("type") ?? "";
+                    long? host = body.Value<long?>("host_wall_id");
+                    var loc = body["location_mm"] != null ? body["location_mm"].ToObject<double[]>() : new[] { 0.0, 0.0, 0.0 };
+                    var rot = body.Value<double?>("rotation_deg") ?? 0;
+                    Dictionary<string, object> pars = null;
+                    if (body["parameters"] != null) pars = body["parameters"].ToObject<Dictionary<string, object>>();
+                    var data = _handler.Run(app => McpOps.PlaceFamily(app, fam, type, host, loc, rot, pars), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /load_family":
+                {
+                    var body = ReadBody(req);
+                    var rfaPath = body.Value<string>("rfa_path") ?? "";
+                    var data = _handler.Run(app => McpOps.LoadFamily(app, rfaPath), 300000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /element":
+                {
+                    var q = ParseQuery(req.Url.Query);
+                    long id;
+                    if (!q.TryGetValue("id", out var ids) || !long.TryParse(ids, out id)) throw new ArgumentException("id required");
+                    WriteJson(ctx, 200, Ok(true, _handler.Run(app => McpOps.GetElement(app, id)), null));
+                    return;
+                }
+            case "GET /query":
+                {
+                    var q = ParseQuery(req.Url.Query);
+                    var cat = q.TryGetValue("category", out var c) ? c : "OST_Walls";
+                    var level = q.TryGetValue("level", out var l) ? l : "";
+                    var limit = GetInt(q, "limit", 500);
+                    WriteJson(ctx, 200, Ok(true, _handler.Run(app => McpOps.QueryElements(app, cat, level, limit)), null));
+                    return;
+                }
+            case "POST /delete":
+                {
+                    var body = ReadBody(req);
+                    var ids = body["ids"] != null ? body["ids"].ToObject<List<long>>() : new List<long>();
+                    var data = _handler.Run(app => McpOps.DeleteElements(app, ids), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /schedules":
+                WriteJson(ctx, 200, Ok(true, _handler.Run(app => McpOps.ListSchedules(app)), null));
+                return;
+            case "GET /schedule":
+                {
+                    var q = ParseQuery(req.Url.Query);
+                    long id;
+                    if (!q.TryGetValue("id", out var ids) || !long.TryParse(ids, out id)) throw new ArgumentException("id required");
+                    WriteJson(ctx, 200, Ok(true, _handler.Run(app => McpOps.GetSchedule(app, id)), null));
+                    return;
+                }
+            case "POST /duplicate_schedule":
+                {
+                    var body = ReadBody(req);
+                    var src = body.Value<long>("source_id");
+                    var name = body.Value<string>("new_name") ?? "Schedule Copy";
+                    var data = _handler.Run(app => McpOps.DuplicateSchedule(app, src, name), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /export_schedule":
+                {
+                    var body = ReadBody(req);
+                    var id = body.Value<long>("schedule_id");
+                    var outPath = body.Value<string>("path");
+                    var data = _handler.Run(app => McpOps.ExportSchedule(app, id, outPath), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
             case "GET /commands":
                 WriteJson(ctx, 200, Ok(true, McpOps.ListHeatLossCommands(), null));
                 return;
@@ -129,6 +251,17 @@ internal class McpHttpServer
                     var body = ReadBody(req);
                     var command = body.Value<string>("command") ?? "calculations";
                     var data = _handler.Run(app => McpOps.RunHeatLoss(app, command), 300000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /create_room":
+                {
+                    var body = ReadBody(req);
+                    var levelId = body.Value<long>("level_id");
+                    var loc = body["location_mm"] != null ? body["location_mm"].ToObject<double[]>() : new[] { 0.0, 0.0 };
+                    var number = body.Value<string>("number") ?? "";
+                    var name = body.Value<string>("name") ?? "";
+                    var data = _handler.Run(app => McpOps.CreateRoom(app, levelId, loc, number, name), 120000);
                     WriteJson(ctx, 200, Ok(true, data, null));
                     return;
                 }

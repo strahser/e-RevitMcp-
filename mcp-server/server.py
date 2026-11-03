@@ -130,6 +130,36 @@ TOOLS = [
                      "Opens the plugin UI modelessly; returns Succeeded/Failed + message."),
      "inputSchema": {"type": "object", "properties": {
          "command": {"type": "string", "description": "HeatLoss command key (default calculations)"}}}},
+    {"name": "revit_create_level", "description": "Create a level at elevation_mm.",
+     "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "elevation_mm": {"type": "number"}}}},
+    {"name": "revit_list_wall_types", "description": "List wall types: id/name/width_mm/kind.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_create_wall_type", "description": "Create a wall type by duplicating an existing one and setting compound structure layers.",
+     "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "layers": {"type": "array"}}}},
+    {"name": "revit_create_wall", "description": "Create a wall: type_id, base_level, top_level, start_mm [x,y], end_mm [x,y], flip.",
+     "inputSchema": {"type": "object", "properties": {"type_id": {"type": "string"}, "base_level": {"type": "string"}, "top_level": {"type": "string"}, "start_mm": {"type": "array"}, "end_mm": {"type": "array"}, "flip": {"type": "boolean"}}, "required": ["type_id", "base_level", "start_mm", "end_mm"]}},
+    {"name": "revit_cut_opening", "description": "Cut a rectangular opening in a wall.",
+     "inputSchema": {"type": "object", "properties": {"host_wall_id": {"type": "integer"}, "width_mm": {"type": "number"}, "height_mm": {"type": "number"}, "sill_mm": {"type": "number"}, "position_mm": {"type": "number"}}, "required": ["host_wall_id", "width_mm", "height_mm"]}},
+    {"name": "revit_place_family", "description": "Place a family instance (window/door/furniture).",
+     "inputSchema": {"type": "object", "properties": {"family": {"type": "string"}, "type": {"type": "string"}, "location_mm": {"type": "array"}, "host_wall_id": {"type": "integer"}, "rotation_deg": {"type": "number"}, "parameters": {"type": "object"}}}},
+    {"name": "revit_load_family", "description": "Load a family from .rfa path.",
+     "inputSchema": {"type": "object", "properties": {"rfa_path": {"type": "string"}}, "required": ["rfa_path"]}},
+    {"name": "revit_get_element", "description": "Get element by id.",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]}},
+    {"name": "revit_query_elements", "description": "Query elements by category/level/limit.",
+     "inputSchema": {"type": "object", "properties": {"category": {"type": "string"}, "level": {"type": "string"}, "limit": {"type": "integer"}}}},
+    {"name": "revit_delete_elements", "description": "Delete elements by ids.",
+     "inputSchema": {"type": "object", "properties": {"ids": {"type": "array"}}}},
+    {"name": "revit_create_room", "description": "Create a room on a level.",
+     "inputSchema": {"type": "object", "properties": {"level_id": {"type": "integer"}, "location_mm": {"type": "array"}, "number": {"type": "string"}, "name": {"type": "string"}}, "required": ["level_id", "location_mm"]}},
+    {"name": "revit_list_schedules", "description": "List schedules in document.",
+     "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_get_schedule", "description": "Get schedule by id (fields + rows).",
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]}},
+    {"name": "revit_duplicate_schedule", "description": "Duplicate a schedule with new name.",
+     "inputSchema": {"type": "object", "properties": {"source_id": {"type": "integer"}, "new_name": {"type": "string"}}, "required": ["source_id"]}},
+    {"name": "revit_export_schedule", "description": "Export schedule to CSV.",
+     "inputSchema": {"type": "object", "properties": {"schedule_id": {"type": "integer"}, "path": {"type": "string"}}, "required": ["schedule_id"]}},
 ]
 
 
@@ -170,6 +200,39 @@ def tool_call(name, args):
         return _api("GET", "/commands", timeout=30)
     if name == "revit_run_heatloss":
         return _api("POST", "/run", {"command": args.get("command") or "calculations"}, timeout=300)
+    if name == "revit_create_level":
+        return _api("POST", "/create_level", {"name": args.get("name"), "elevation_mm": args.get("elevation_mm", 0)}, timeout=120)
+    if name == "revit_list_wall_types":
+        return _api("GET", "/wall_types", timeout=60)
+    if name == "revit_create_wall_type":
+        return _api("POST", "/create_wall_type", {"name": args.get("name"), "layers": args.get("layers")}, timeout=120)
+    if name == "revit_create_wall":
+        return _api("POST", "/create_wall", {"type_id": args.get("type_id"), "base_level": args.get("base_level"), "top_level": args.get("top_level"), "start_mm": args.get("start_mm"), "end_mm": args.get("end_mm"), "flip": bool(args.get("flip", False))}, timeout=120)
+    if name == "revit_cut_opening":
+        return _api("POST", "/cut_opening", {"host_wall_id": args.get("host_wall_id"), "width_mm": args.get("width_mm"), "height_mm": args.get("height_mm"), "sill_mm": args.get("sill_mm", 900), "position_mm": args.get("position_mm", 0)}, timeout=120)
+    if name == "revit_place_family":
+        return _api("POST", "/place_family", {"family": args.get("family"), "type": args.get("type"), "location_mm": args.get("location_mm"), "host_wall_id": args.get("host_wall_id"), "rotation_deg": args.get("rotation_deg", 0), "parameters": args.get("parameters")}, timeout=180)
+    if name == "revit_load_family":
+        return _api("POST", "/load_family", {"rfa_path": args.get("rfa_path")}, timeout=300)
+    if name == "revit_get_element":
+        q = urllib.parse.urlencode({"id": args.get("id")})
+        return _api("GET", "/element?%s" % q, timeout=60)
+    if name == "revit_query_elements":
+        q = urllib.parse.urlencode({"category": args.get("category", "OST_Walls"), "level": args.get("level", ""), "limit": args.get("limit", 500)})
+        return _api("GET", "/query?%s" % q, timeout=60)
+    if name == "revit_delete_elements":
+        return _api("POST", "/delete", {"ids": args.get("ids", [])}, timeout=120)
+    if name == "revit_create_room":
+        return _api("POST", "/create_room", {"level_id": args.get("level_id"), "location_mm": args.get("location_mm"), "number": args.get("number", ""), "name": args.get("name", "")}, timeout=120)
+    if name == "revit_list_schedules":
+        return _api("GET", "/schedules", timeout=60)
+    if name == "revit_get_schedule":
+        q = urllib.parse.urlencode({"id": args.get("id")})
+        return _api("GET", "/schedule?%s" % q, timeout=60)
+    if name == "revit_duplicate_schedule":
+        return _api("POST", "/duplicate_schedule", {"source_id": args.get("source_id"), "new_name": args.get("new_name")}, timeout=120)
+    if name == "revit_export_schedule":
+        return _api("POST", "/export_schedule", {"schedule_id": args.get("schedule_id"), "path": args.get("path")}, timeout=120)
     raise ValueError("unknown tool: %s" % name)
 
 

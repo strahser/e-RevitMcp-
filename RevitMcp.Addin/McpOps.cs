@@ -15,7 +15,7 @@ namespace RevitMcp;
 /// All Revit-API work. Every method runs on Revit's main thread (via McpHandler)
 /// and returns JSON-serializable objects (dictionaries / lists / primitives).
 /// </summary>
-internal static class McpOps
+internal static partial class McpOps
 {
     public static object Ping(UIApplication app)
     {
@@ -190,14 +190,9 @@ internal static class McpOps
         if (!HeatLossCommands.TryGetValue(key, out var typeName))
             throw new ArgumentException("Unknown command '" + key + "'. Known: " + string.Join(", ", HeatLossCommands.Keys));
 
-        var asm = FindAssembly("MainAppHeatLoss");
-        if (asm == null)
-            throw new InvalidOperationException(
-                "MainAppHeatLoss.dll is not loaded. Open a model first or install the HeatLoss plugin (MainAppHeatLoss.addin).");
-
-        var type = asm.GetType(typeName);
+        var type = FindCommandType(typeName);
         if (type == null)
-            throw new InvalidOperationException("Type not found: " + typeName + " in " + asm.FullName);
+            throw new InvalidOperationException("Type not found: " + typeName + " (probed loaded assemblies + plugin folders)");
 
         var cmd = Activator.CreateInstance(type) as IExternalCommand;
         if (cmd == null)
@@ -222,6 +217,57 @@ internal static class McpOps
         {
             { "commands", HeatLossCommands.Keys.ToArray() },
         };
+    }
+
+    /// <summary>
+    /// HeatLoss is split across assemblies (MainAppHeatLoss.dll = shell,
+    /// MainAppHeatLoss.Projects.dll = modeling/tools, DirectShapeSnapshot.TestKit.dll
+    /// = diagnostics). Resolve the command type assembly-agnostically: loaded
+    /// assemblies first, then probe the Revit Addins deploy folders.
+    /// </summary>
+    private static Type FindCommandType(string typeName)
+    {
+        foreach (var a in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                var t = a.GetType(typeName, false);
+                if (t != null) return t;
+            }
+            catch (Exception) { }
+        }
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        foreach (var dir in new[] { @"Autodesk\Revit\Addins\2024", @"Autodesk\Revit\Addins\2025" })
+        {
+            List<string> files = null;
+            try
+            {
+                var root = Path.Combine(appData, dir);
+                if (!Directory.Exists(root)) continue;
+                files = Directory.GetFiles(root, "*.dll", SearchOption.AllDirectories)
+                    .Where(p => IsPluginDll(Path.GetFileName(p))).ToList();
+            }
+            catch (Exception) { }
+            if (files == null) continue;
+            foreach (var hit in files)
+            {
+                try
+                {
+                    var asm = Assembly.LoadFrom(hit);
+                    var t = asm.GetType(typeName, false);
+                    if (t != null) return t;
+                }
+                catch (Exception) { }
+            }
+        }
+        return null;
+    }
+
+    private static bool IsPluginDll(string fileName)
+    {
+        return fileName.StartsWith("MainAppHeatLoss", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("DirectShapeSnapshot", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("HeatLossRevit", StringComparison.OrdinalIgnoreCase);
     }
 
     private static Assembly FindAssembly(string simpleName)

@@ -28,4 +28,9 @@
         <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\..\RevitBimCore\src\RevitBimCore.Core\RevitBimCore.Core.csproj" />
+        <ProjectReference Include="..\..\RevitBimCore\src\RevitBimCore.Json\RevitBimCore.Json.csproj" />
+    </ItemGroup>
+
 </Project>
