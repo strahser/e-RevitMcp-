@@ -406,6 +406,90 @@ internal class McpHttpServer
                     WriteJson(ctx, 200, Ok(true, data, null));
                     return;
                 }
+
+            case "GET /families":
+                {
+                    var q = ParseQuery(req.Url.Query);
+                    var category = q.TryGetValue("category", out var c) ? c : "";
+                    var data = _handler.Run(app => McpOps.ListFamilies(app, category), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /instance_params":
+                {
+                    var q = ParseQuery(req.Url.Query);
+                    var id = GetInt(q, "id", 0);
+                    var data = _handler.Run(app => McpOps.GetInstanceParams(app, id), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /set_instance_param":
+                {
+                    var body = ReadBody(req);
+                    var id = body.Value<long>("instance_id");
+                    var name = body.Value<string>("param_name") ?? "";
+                    var value = body["value"];
+                    object v = null;
+                    if (value != null)
+                    {
+                        if (value.Type == JTokenType.Float || value.Type == JTokenType.Integer) v = value.Value<double>();
+                        else if (value.Type == JTokenType.Boolean) v = value.Value<bool>();
+                        else v = value.ToString();
+                    }
+                    var data = _handler.Run(app => McpOps.SetInstanceParam(app, id, name, v), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /create_schedule":
+                {
+                    var body = ReadBody(req);
+                    var cat = body.Value<int>("category_id");
+                    var name = body.Value<string>("name") ?? "";
+                    var fields = body["fields"] != null ? body["fields"].ToObject<List<string>>() : new List<string>();
+                    var data = _handler.Run(app => McpOps.CreateSchedule(app, cat, name, fields, null, null, null), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /modify_schedule":
+                {
+                    var body = ReadBody(req);
+                    var id = body.Value<long>("schedule_id");
+                    var fields = body["fields"] != null ? body["fields"].ToObject<List<string>>() : null;
+                    var data = _handler.Run(app => McpOps.ModifySchedule(app, id, fields, null, null, null), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /refresh_schedule":
+                {
+                    var body = ReadBody(req);
+                    long? id = body["schedule_id"] != null ? body.Value<long>("schedule_id") : (long?)null;
+                    var data = _handler.Run(app => McpOps.RefreshSchedule(app, id), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /backup_document":
+                {
+                    var body = ReadBody(req);
+                    var backupPath = body.Value<string>("path");
+                    var data = _handler.Run(app => McpOps.BackupDocument(app, backupPath), 300000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /dry_run":
+                {
+                    var body = ReadBody(req);
+                    var op = body.Value<string>("operation") ?? "";
+                    var args = body["args"] != null ? body["args"].ToObject<Dictionary<string, object>>() : new Dictionary<string, object>();
+                    var data = _handler.Run(app => McpOps.DryRun(app, op, args), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /undo_last":
+                {
+                    var data = _handler.Run(app => McpOps.UndoLast(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
             default:
                 WriteJson(ctx, 404, Ok(false, null, "Unknown route: " + req.HttpMethod + " " + path));
                 return;

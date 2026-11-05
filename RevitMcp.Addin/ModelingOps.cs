@@ -751,4 +751,183 @@ internal static partial class McpOps
         return new Dictionary<string, object> { { "ok", true }, { "id", view.Id.Value }, { "name", view.Name } };
     }
 
+    // ---------- Phase 3: Families & parameters ----------
+    public static object ListFamilies(UIApplication app, string category)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<Dictionary<string, object>>();
+        foreach (Family f in new FilteredElementCollector(doc).OfClass(typeof(Family)))
+        {
+            if (!string.IsNullOrWhiteSpace(category) && (f.FamilyCategory == null || f.FamilyCategory.Name != category)) continue;
+            var types = new List<string>();
+            foreach (FamilySymbol fs in f.GetFamilySymbolIds().Select(id => doc.GetElement(id)))
+                types.Add(fs.Name);
+            items.Add(new Dictionary<string, object>
+            {
+                { "name", f.Name },
+                { "category", f.FamilyCategory != null ? f.FamilyCategory.Name : "" },
+                { "types", types },
+            });
+        }
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    public static object GetInstanceParams(UIApplication app, long instanceId)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var fi = doc.GetElement(new ElementId(instanceId)) as FamilyInstance;
+        if (fi == null) throw new InvalidOperationException("Family instance not found: " + instanceId);
+        var items = new List<Dictionary<string, object>>();
+        foreach (Parameter p in fi.Parameters)
+        {
+            try { items.Add(new Dictionary<string, object> { { "name", p.Definition.Name }, { "value", ParamValue(p) }, { "isReadOnly", p.IsReadOnly }, { "storageType", p.StorageType.ToString() } }); } catch (Exception) { }
+        }
+        return new Dictionary<string, object> { { "id", fi.Id.Value }, { "family", fi.Symbol.Family.Name }, { "type", fi.Symbol.Name }, { "parameters", items } };
+    }
+
+    public static object SetInstanceParam(UIApplication app, long instanceId, string paramName, object value)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var fi = doc.GetElement(new ElementId(instanceId)) as FamilyInstance;
+        if (fi == null) throw new InvalidOperationException("Family instance not found: " + instanceId);
+        using (var tx = new Transaction(doc, "Set Instance Param"))
+        {
+            tx.Start();
+            var p = fi.LookupParameter(paramName);
+            if (p == null) throw new InvalidOperationException("Parameter not found: " + paramName);
+            if (p.IsReadOnly) throw new InvalidOperationException("Parameter is read-only: " + paramName);
+            if (value is double d) p.Set(d);
+            else if (value is int i) p.Set(i);
+            else if (value is long l) p.Set((int)l);
+            else if (value is bool b) p.Set(b ? 1 : 0);
+            else if (value is string s) p.Set(s);
+            else p.Set(Convert.ToString(value));
+            tx.Commit();
+            return new Dictionary<string, object> { { "ok", true }, { "id", instanceId }, { "param", paramName }, { "value", ParamValue(p) } };
+        }
+    }
+
+    // ---------- Phase 4: Schedules on template ----------
+    public static object CreateSchedule(UIApplication app, int categoryId, string name, List<string> fields, List<Dictionary<string, object>> filters, string groupingField, string sortingField)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var cat = new ElementId(new Autodesk.Revit.DB.BuiltInCategory().GetType() == typeof(int) ? 0 : 0);
+        // resolve category
+        Category category = null;
+        foreach (Category c in doc.Settings.Categories)
+        {
+            if (c.Id.Value == categoryId) { category = c; break; }
+        }
+        if (category == null)
+        {
+            // try by built-in name
+            foreach (Category c in doc.Settings.Categories)
+            {
+                if (c.Name.Equals("Walls", StringComparison.OrdinalIgnoreCase) && categoryId == (int)BuiltInCategory.OST_Walls) { category = c; break; }
+            }
+        }
+        if (category == null) throw new InvalidOperationException("Category not found: " + categoryId);
+        using (var tx = new Transaction(doc, "Create Schedule"))
+        {
+            tx.Start();
+            var vs = ViewSchedule.CreateSchedule(doc, category.Id);
+            if (!string.IsNullOrWhiteSpace(name)) vs.Name = name;
+            // add fields
+            var schedulable = vs.Definition.GetSchedulableFields();
+            if (fields != null)
+            {
+                foreach (var fn in fields)
+                {
+                    var sf = schedulable.FirstOrDefault(f => { try { return f.GetName(doc).Equals(fn, StringComparison.OrdinalIgnoreCase); } catch (Exception) { return false; } });
+                    if (sf != null) vs.Definition.AddField(sf);
+                }
+            }
+            tx.Commit();
+            return new Dictionary<string, object> { { "id", vs.Id.Value }, { "name", vs.Name } };
+        }
+    }
+
+    public static object ModifySchedule(UIApplication app, long scheduleId, List<string> fields, List<Dictionary<string, object>> filters, string groupingField, string sortingField)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var vs = doc.GetElement(new ElementId(scheduleId)) as ViewSchedule;
+        if (vs == null) throw new InvalidOperationException("Schedule not found: " + scheduleId);
+        using (var tx = new Transaction(doc, "Modify Schedule"))
+        {
+            tx.Start();
+            if (fields != null && fields.Count > 0)
+            {
+                // clear existing fields
+                foreach (var fid in vs.Definition.GetFieldOrder().ToList())
+                    vs.Definition.RemoveField(fid);
+                var schedulable = vs.Definition.GetSchedulableFields();
+                foreach (var fn in fields)
+                {
+                    var sf = schedulable.FirstOrDefault(f => { try { return f.GetName(doc).Equals(fn, StringComparison.OrdinalIgnoreCase); } catch (Exception) { return false; } });
+                    if (sf != null) vs.Definition.AddField(sf);
+                }
+            }
+            tx.Commit();
+            return new Dictionary<string, object> { { "ok", true }, { "id", scheduleId } };
+        }
+    }
+
+    public static object RefreshSchedule(UIApplication app, long? scheduleId)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var schedules = scheduleId.HasValue
+            ? new List<ViewSchedule> { doc.GetElement(new ElementId(scheduleId.Value)) as ViewSchedule }.Where(x => x != null).ToList()
+            : new FilteredElementCollector(doc).OfClass(typeof(ViewSchedule)).Cast<ViewSchedule>().ToList();
+        int n = 0;
+        foreach (var vs in schedules)
+        {
+            try { vs.RefreshData(); n++; } catch (Exception) { }
+        }
+        return new Dictionary<string, object> { { "refreshed", n } };
+    }
+
+    // ---------- Phase 5: Safety ----------
+    public static object BackupDocument(UIApplication app, string path)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        if (string.IsNullOrWhiteSpace(path))
+            path = Path.Combine(Path.GetTempPath(), doc.Title + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".rvt");
+        Directory.CreateDirectory(Path.GetDirectoryName(path));
+        doc.SaveAs(path, new SaveAsOptions { OverwriteExistingFile = true });
+        return new Dictionary<string, object> { { "path", path } };
+    }
+
+    public static object DryRun(UIApplication app, string operation, Dictionary<string, object> args)
+    {
+        // Returns a plan without executing. For RevitMcp, the plan is just echoing the operation + args.
+        return new Dictionary<string, object>
+        {
+            { "dry_run", true },
+            { "operation", operation },
+            { "args", args ?? new Dictionary<string, object>() },
+            { "note", "No changes were made. Re-run the same operation without dry_run to execute." },
+        };
+    }
+
+    public static object UndoLast(UIApplication app)
+    {
+        // Revit API does not expose a direct programmatic Undo for committed transactions.
+        // Each RevitMcp operation is its own transaction; undo via Revit UI (Ctrl+Z) if needed.
+        return new Dictionary<string, object> { { "ok", false }, { "note", "Per-operation transactions are already committed; use Revit UI Undo (Ctrl+Z) to revert. For safety, use backup_document before destructive ops." } };
+    }
+
 }

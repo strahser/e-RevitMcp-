@@ -177,6 +177,15 @@ TOOLS = [
     {"name": "revit_list_categories", "description": "List document categories.", "inputSchema": {"type": "object", "properties": {}}},
     {"name": "revit_create_view_3d", "description": "Create a 3D isometric view.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}}},
     {"name": "revit_set_active_view", "description": "Set active view by name or id.", "inputSchema": {"type": "object", "properties": {"view": {"type": "string"}}, "required": ["view"]}},
+    {"name": "revit_list_families", "description": "List families (optional category filter).", "inputSchema": {"type": "object", "properties": {"category": {"type": "string"}}}},
+    {"name": "revit_get_instance_params", "description": "Get instance parameters.", "inputSchema": {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]}},
+    {"name": "revit_set_instance_param", "description": "Set instance parameter value.", "inputSchema": {"type": "object", "properties": {"instance_id": {"type": "integer"}, "param_name": {"type": "string"}, "value": {}}, "required": ["instance_id", "param_name", "value"]}},
+    {"name": "revit_create_schedule", "description": "Create a schedule: category_id, name, fields[].", "inputSchema": {"type": "object", "properties": {"category_id": {"type": "integer"}, "name": {"type": "string"}, "fields": {"type": "array"}}, "required": ["category_id"]}},
+    {"name": "revit_modify_schedule", "description": "Modify schedule fields.", "inputSchema": {"type": "object", "properties": {"schedule_id": {"type": "integer"}, "fields": {"type": "array"}}, "required": ["schedule_id"]}},
+    {"name": "revit_refresh_schedule", "description": "Refresh schedule(s).", "inputSchema": {"type": "object", "properties": {"schedule_id": {"type": "integer"}}}},
+    {"name": "revit_backup_document", "description": "Save a backup copy of the document.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}},
+    {"name": "revit_dry_run", "description": "Plan an operation without executing.", "inputSchema": {"type": "object", "properties": {"operation": {"type": "string"}, "args": {"type": "object"}}, "required": ["operation"]}},
+    {"name": "revit_undo_last", "description": "Undo last (best-effort note).", "inputSchema": {"type": "object", "properties": {}}},
 ]
 
 
@@ -286,6 +295,26 @@ def tool_call(name, args):
         return _api("POST", "/create_view_3d", {"name": args.get("name")}, timeout=120)
     if name == "revit_set_active_view":
         return _api("POST", "/set_active_view", {"view": args.get("view")}, timeout=60)
+    if name == "revit_list_families":
+        q = urllib.parse.urlencode({"category": args.get("category", "")})
+        return _api("GET", "/families?%s" % q, timeout=60)
+    if name == "revit_get_instance_params":
+        q = urllib.parse.urlencode({"id": args.get("id")})
+        return _api("GET", "/instance_params?%s" % q, timeout=60)
+    if name == "revit_set_instance_param":
+        return _api("POST", "/set_instance_param", {"instance_id": args.get("instance_id"), "param_name": args.get("param_name"), "value": args.get("value")}, timeout=120)
+    if name == "revit_create_schedule":
+        return _api("POST", "/create_schedule", {"category_id": args.get("category_id"), "name": args.get("name"), "fields": args.get("fields")}, timeout=120)
+    if name == "revit_modify_schedule":
+        return _api("POST", "/modify_schedule", {"schedule_id": args.get("schedule_id"), "fields": args.get("fields")}, timeout=120)
+    if name == "revit_refresh_schedule":
+        return _api("POST", "/refresh_schedule", {"schedule_id": args.get("schedule_id")}, timeout=120)
+    if name == "revit_backup_document":
+        return _api("POST", "/backup_document", {"path": args.get("path")}, timeout=300)
+    if name == "revit_dry_run":
+        return _api("POST", "/dry_run", {"operation": args.get("operation"), "args": args.get("args")}, timeout=60)
+    if name == "revit_undo_last":
+        return _api("POST", "/undo_last", {}, timeout=60)
     raise ValueError("unknown tool: %s" % name)
 
 
