@@ -160,6 +160,23 @@ TOOLS = [
      "inputSchema": {"type": "object", "properties": {"source_id": {"type": "integer"}, "new_name": {"type": "string"}}, "required": ["source_id"]}},
     {"name": "revit_export_schedule", "description": "Export schedule to CSV.",
      "inputSchema": {"type": "object", "properties": {"schedule_id": {"type": "integer"}, "path": {"type": "string"}}, "required": ["schedule_id"]}},
+    {"name": "revit_create_grid", "description": "Create a grid line.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}, "start_mm": {"type": "array"}, "end_mm": {"type": "array"}}, "required": ["start_mm", "end_mm"]}},
+    {"name": "revit_list_grids", "description": "List grids.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_create_floor", "description": "Create a floor.", "inputSchema": {"type": "object", "properties": {"level_id": {"type": "integer"}, "boundary_mm": {"type": "array"}, "floor_type": {"type": "string"}}, "required": ["level_id", "boundary_mm"]}},
+    {"name": "revit_list_floors", "description": "List floors.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_create_ceiling", "description": "Create a ceiling.", "inputSchema": {"type": "object", "properties": {"level_id": {"type": "integer"}, "boundary_mm": {"type": "array"}, "ceiling_type": {"type": "string"}}, "required": ["level_id", "boundary_mm"]}},
+    {"name": "revit_list_ceilings", "description": "List ceilings.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_create_roof", "description": "Create a footprint roof.", "inputSchema": {"type": "object", "properties": {"level_id": {"type": "integer"}, "boundary_mm": {"type": "array"}, "roof_type": {"type": "string"}}, "required": ["level_id", "boundary_mm"]}},
+    {"name": "revit_list_roofs", "description": "List roofs.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_move_element", "description": "Move element by delta_mm.", "inputSchema": {"type": "object", "properties": {"element_id": {"type": "integer"}, "delta_mm": {"type": "array"}}, "required": ["element_id", "delta_mm"]}},
+    {"name": "revit_rotate_element", "description": "Rotate element.", "inputSchema": {"type": "object", "properties": {"element_id": {"type": "integer"}, "center_mm": {"type": "array"}, "angle_deg": {"type": "number"}}, "required": ["element_id", "center_mm", "angle_deg"]}},
+    {"name": "revit_copy_element", "description": "Copy element.", "inputSchema": {"type": "object", "properties": {"element_id": {"type": "integer"}, "delta_mm": {"type": "array"}}, "required": ["element_id", "delta_mm"]}},
+    {"name": "revit_mirror_element", "description": "Mirror element across a vertical plane.", "inputSchema": {"type": "object", "properties": {"element_id": {"type": "integer"}, "axis_mm": {"type": "array"}}, "required": ["element_id", "axis_mm"]}},
+    {"name": "revit_measure_distance", "description": "Measure distance between two elements (mm).", "inputSchema": {"type": "object", "properties": {"id1": {"type": "integer"}, "id2": {"type": "integer"}}, "required": ["id1", "id2"]}},
+    {"name": "revit_get_bounding_box", "description": "Get element bounding box (mm).", "inputSchema": {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]}},
+    {"name": "revit_list_categories", "description": "List document categories.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_create_view_3d", "description": "Create a 3D isometric view.", "inputSchema": {"type": "object", "properties": {"name": {"type": "string"}}}},
+    {"name": "revit_set_active_view", "description": "Set active view by name or id.", "inputSchema": {"type": "object", "properties": {"view": {"type": "string"}}, "required": ["view"]}},
 ]
 
 
@@ -233,6 +250,42 @@ def tool_call(name, args):
         return _api("POST", "/duplicate_schedule", {"source_id": args.get("source_id"), "new_name": args.get("new_name")}, timeout=120)
     if name == "revit_export_schedule":
         return _api("POST", "/export_schedule", {"schedule_id": args.get("schedule_id"), "path": args.get("path")}, timeout=120)
+    if name == "revit_create_grid":
+        return _api("POST", "/create_grid", {"name": args.get("name"), "start_mm": args.get("start_mm"), "end_mm": args.get("end_mm")}, timeout=120)
+    if name == "revit_list_grids":
+        return _api("GET", "/grids", timeout=60)
+    if name == "revit_create_floor":
+        return _api("POST", "/create_floor", {"level_id": args.get("level_id"), "boundary_mm": args.get("boundary_mm"), "floor_type": args.get("floor_type")}, timeout=180)
+    if name == "revit_list_floors":
+        return _api("GET", "/floors", timeout=60)
+    if name == "revit_create_ceiling":
+        return _api("POST", "/create_ceiling", {"level_id": args.get("level_id"), "boundary_mm": args.get("boundary_mm"), "ceiling_type": args.get("ceiling_type")}, timeout=180)
+    if name == "revit_list_ceilings":
+        return _api("GET", "/ceilings", timeout=60)
+    if name == "revit_create_roof":
+        return _api("POST", "/create_roof", {"level_id": args.get("level_id"), "boundary_mm": args.get("boundary_mm"), "roof_type": args.get("roof_type")}, timeout=180)
+    if name == "revit_list_roofs":
+        return _api("GET", "/roofs", timeout=60)
+    if name == "revit_move_element":
+        return _api("POST", "/move_element", {"element_id": args.get("element_id"), "delta_mm": args.get("delta_mm")}, timeout=120)
+    if name == "revit_rotate_element":
+        return _api("POST", "/rotate_element", {"element_id": args.get("element_id"), "center_mm": args.get("center_mm"), "angle_deg": args.get("angle_deg")}, timeout=120)
+    if name == "revit_copy_element":
+        return _api("POST", "/copy_element", {"element_id": args.get("element_id"), "delta_mm": args.get("delta_mm")}, timeout=120)
+    if name == "revit_mirror_element":
+        return _api("POST", "/mirror_element", {"element_id": args.get("element_id"), "axis_mm": args.get("axis_mm")}, timeout=120)
+    if name == "revit_measure_distance":
+        q = urllib.parse.urlencode({"id1": args.get("id1"), "id2": args.get("id2")})
+        return _api("GET", "/measure_distance?%s" % q, timeout=60)
+    if name == "revit_get_bounding_box":
+        q = urllib.parse.urlencode({"id": args.get("id")})
+        return _api("GET", "/bounding_box?%s" % q, timeout=60)
+    if name == "revit_list_categories":
+        return _api("GET", "/categories", timeout=60)
+    if name == "revit_create_view_3d":
+        return _api("POST", "/create_view_3d", {"name": args.get("name")}, timeout=120)
+    if name == "revit_set_active_view":
+        return _api("POST", "/set_active_view", {"view": args.get("view")}, timeout=60)
     raise ValueError("unknown tool: %s" % name)
 
 

@@ -428,4 +428,327 @@ internal static partial class McpOps
         }
         catch (Exception) { return p.AsValueString(); }
     }
+    // ---------- Phase 2: Grids ----------
+    public static object CreateGrid(UIApplication app, string name, double[] startMm, double[] endMm)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        using (var tx = new Transaction(doc, "Create Grid"))
+        {
+            tx.Start();
+            var s = new XYZ(startMm[0] / 304.8, startMm[1] / 304.8, 0);
+            var e = new XYZ(endMm[0] / 304.8, endMm[1] / 304.8, 0);
+            var grid = Grid.Create(doc, Line.CreateBound(s, e));
+            if (!string.IsNullOrWhiteSpace(name)) grid.Name = name;
+            tx.Commit();
+            return new Dictionary<string, object> { { "id", grid.Id.Value }, { "name", grid.Name } };
+        }
+    }
+
+    public static object ListGrids(UIApplication app)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<Dictionary<string, object>>();
+        foreach (Grid g in new FilteredElementCollector(doc).OfClass(typeof(Grid)))
+        {
+            var c = g.Curve;
+            items.Add(new Dictionary<string, object>
+            {
+                { "id", g.Id.Value },
+                { "name", g.Name },
+                { "start_mm", new[] { c.GetEndPoint(0).X * 304.8, c.GetEndPoint(0).Y * 304.8 } },
+                { "end_mm", new[] { c.GetEndPoint(1).X * 304.8, c.GetEndPoint(1).Y * 304.8 } },
+            });
+        }
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    // ---------- Phase 2: Floors / Roofs / Ceilings ----------
+    private static CurveLoop BoundaryToLoop(double[][] boundaryMm)
+    {
+        var loop = new CurveLoop();
+        int n = boundaryMm.Length;
+        for (int i = 0; i < n; i++)
+        {
+            var a = boundaryMm[i];
+            var b = boundaryMm[(i + 1) % n];
+            var sa = new XYZ(a[0] / 304.8, a[1] / 304.8, 0);
+            var sb = new XYZ(b[0] / 304.8, b[1] / 304.8, 0);
+            loop.Append(Line.CreateBound(sa, sb));
+        }
+        return loop;
+    }
+
+    public static object CreateFloor(UIApplication app, long levelId, double[][] boundaryMm, string floorTypeName)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var level = doc.GetElement(new ElementId(levelId)) as Level;
+        if (level == null) throw new InvalidOperationException("Level not found: " + levelId);
+        FloorType ft = null;
+        if (!string.IsNullOrWhiteSpace(floorTypeName))
+            ft = new FilteredElementCollector(doc).OfClass(typeof(FloorType)).Cast<FloorType>().FirstOrDefault(t => t.Name == floorTypeName);
+        if (ft == null) ft = new FilteredElementCollector(doc).OfClass(typeof(FloorType)).Cast<FloorType>().FirstOrDefault();
+        if (ft == null) throw new InvalidOperationException("No floor type in document");
+        using (var tx = new Transaction(doc, "Create Floor"))
+        {
+            tx.Start();
+            var floor = Floor.Create(doc, new List<CurveLoop> { BoundaryToLoop(boundaryMm) }, ft.Id, level.Id);
+            tx.Commit();
+            return new Dictionary<string, object> { { "id", floor.Id.Value }, { "uniqueId", floor.UniqueId } };
+        }
+    }
+
+    public static object ListFloors(UIApplication app)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<Dictionary<string, object>>();
+        foreach (Floor f in new FilteredElementCollector(doc).OfClass(typeof(Floor)))
+            items.Add(new Dictionary<string, object> { { "id", f.Id.Value }, { "name", f.Name } });
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    public static object CreateCeiling(UIApplication app, long levelId, double[][] boundaryMm, string ceilingTypeName)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var level = doc.GetElement(new ElementId(levelId)) as Level;
+        if (level == null) throw new InvalidOperationException("Level not found: " + levelId);
+        CeilingType ct = null;
+        if (!string.IsNullOrWhiteSpace(ceilingTypeName))
+            ct = new FilteredElementCollector(doc).OfClass(typeof(CeilingType)).Cast<CeilingType>().FirstOrDefault(t => t.Name == ceilingTypeName);
+        if (ct == null) ct = new FilteredElementCollector(doc).OfClass(typeof(CeilingType)).Cast<CeilingType>().FirstOrDefault();
+        if (ct == null) throw new InvalidOperationException("No ceiling type in document");
+        using (var tx = new Transaction(doc, "Create Ceiling"))
+        {
+            tx.Start();
+            var ceiling = Ceiling.Create(doc, new List<CurveLoop> { BoundaryToLoop(boundaryMm) }, ct.Id, level.Id);
+            tx.Commit();
+            return new Dictionary<string, object> { { "id", ceiling.Id.Value }, { "uniqueId", ceiling.UniqueId } };
+        }
+    }
+
+    public static object ListCeilings(UIApplication app)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<Dictionary<string, object>>();
+        foreach (Ceiling c in new FilteredElementCollector(doc).OfClass(typeof(Ceiling)))
+            items.Add(new Dictionary<string, object> { { "id", c.Id.Value }, { "name", c.Name } });
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    public static object CreateRoof(UIApplication app, long levelId, double[][] boundaryMm, string roofTypeName)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var level = doc.GetElement(new ElementId(levelId)) as Level;
+        if (level == null) throw new InvalidOperationException("Level not found: " + levelId);
+        RoofType rt = null;
+        if (!string.IsNullOrWhiteSpace(roofTypeName))
+            rt = new FilteredElementCollector(doc).OfClass(typeof(RoofType)).Cast<RoofType>().FirstOrDefault(t => t.Name == roofTypeName);
+        if (rt == null) rt = new FilteredElementCollector(doc).OfClass(typeof(RoofType)).Cast<RoofType>().FirstOrDefault();
+        if (rt == null) throw new InvalidOperationException("No roof type in document");
+        using (var tx = new Transaction(doc, "Create Roof"))
+        {
+            tx.Start();
+            var curveArray = new CurveArray();
+            int n = boundaryMm.Length;
+            for (int i = 0; i < n; i++)
+            {
+                var a = boundaryMm[i];
+                var b = boundaryMm[(i + 1) % n];
+                curveArray.Append(Line.CreateBound(
+                    new XYZ(a[0] / 304.8, a[1] / 304.8, 0),
+                    new XYZ(b[0] / 304.8, b[1] / 304.8, 0)));
+            }
+            ModelCurveArray footPrint;
+            var roof = doc.Create.NewFootPrintRoof(curveArray, level, rt, out footPrint);
+            tx.Commit();
+            return new Dictionary<string, object> { { "id", roof.Id.Value }, { "uniqueId", roof.UniqueId } };
+        }
+    }
+
+    public static object ListRoofs(UIApplication app)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<Dictionary<string, object>>();
+        foreach (RoofBase r in new FilteredElementCollector(doc).OfClass(typeof(RoofBase)))
+            items.Add(new Dictionary<string, object> { { "id", r.Id.Value }, { "name", r.Name } });
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    // ---------- Phase 2: Edit geometry ----------
+    public static object MoveElement(UIApplication app, long elementId, double[] deltaMm)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var id = new ElementId(elementId);
+        if (doc.GetElement(id) == null) throw new InvalidOperationException("Element not found: " + elementId);
+        using (var tx = new Transaction(doc, "Move Element"))
+        {
+            tx.Start();
+            ElementTransformUtils.MoveElement(doc, id, new XYZ(deltaMm[0] / 304.8, deltaMm[1] / 304.8, (deltaMm.Length > 2 ? deltaMm[2] : 0) / 304.8));
+            tx.Commit();
+        }
+        return new Dictionary<string, object> { { "ok", true }, { "id", elementId } };
+    }
+
+    public static object RotateElement(UIApplication app, long elementId, double[] centerMm, double angleDeg)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var id = new ElementId(elementId);
+        var el = doc.GetElement(id);
+        if (el == null) throw new InvalidOperationException("Element not found: " + elementId);
+        var center = new XYZ(centerMm[0] / 304.8, centerMm[1] / 304.8, (centerMm.Length > 2 ? centerMm[2] : 0) / 304.8);
+        using (var tx = new Transaction(doc, "Rotate Element"))
+        {
+            tx.Start();
+            var axis = Line.CreateBound(center, center + XYZ.BasisZ);
+            ElementTransformUtils.RotateElement(doc, id, axis, angleDeg * Math.PI / 180.0);
+            tx.Commit();
+        }
+        return new Dictionary<string, object> { { "ok", true }, { "id", elementId } };
+    }
+
+    public static object CopyElement(UIApplication app, long elementId, double[] deltaMm)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var id = new ElementId(elementId);
+        if (doc.GetElement(id) == null) throw new InvalidOperationException("Element not found: " + elementId);
+        using (var tx = new Transaction(doc, "Copy Element"))
+        {
+            tx.Start();
+            var newIds = ElementTransformUtils.CopyElement(doc, id, new XYZ(deltaMm[0] / 304.8, deltaMm[1] / 304.8, (deltaMm.Length > 2 ? deltaMm[2] : 0) / 304.8));
+            tx.Commit();
+            var newId = newIds.FirstOrDefault().Value;
+            var newEl = doc.GetElement(new ElementId(newId));
+            return new Dictionary<string, object> { { "id", newId }, { "uniqueId", newEl != null ? newEl.UniqueId : "" } };
+        }
+    }
+
+    public static object MirrorElement(UIApplication app, long elementId, double[][] axisPointsMm)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var id = new ElementId(elementId);
+        if (doc.GetElement(id) == null) throw new InvalidOperationException("Element not found: " + elementId);
+        // axisPointsMm: two points defining a mirror line in XY; build a vertical plane
+        var p0 = new XYZ(axisPointsMm[0][0] / 304.8, axisPointsMm[0][1] / 304.8, 0);
+        var p1 = new XYZ(axisPointsMm[1][0] / 304.8, axisPointsMm[1][1] / 304.8, 0);
+        var mid = (p0 + p1) * 0.5;
+        var dir = (p1 - p0).Normalize();
+        var normal = new XYZ(-dir.Y, dir.X, 0);
+        var plane = Plane.CreateByNormalAndOrigin(normal, mid);
+        using (var tx = new Transaction(doc, "Mirror Element"))
+        {
+            tx.Start();
+            ElementTransformUtils.MirrorElement(doc, id, plane);
+            tx.Commit();
+        }
+        return new Dictionary<string, object> { { "ok", true }, { "id", elementId } };
+    }
+
+    // ---------- Phase 2: Measure / bbox / categories / views ----------
+    public static object MeasureDistance(UIApplication app, long id1, long id2)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var e1 = doc.GetElement(new ElementId(id1));
+        var e2 = doc.GetElement(new ElementId(id2));
+        if (e1 == null || e2 == null) throw new InvalidOperationException("Element not found");
+        var c1 = CenterOf(e1);
+        var c2 = CenterOf(e2);
+        var dist = c1.DistanceTo(c2) * 304.8;
+        return new Dictionary<string, object> { { "distance_mm", Math.Round(dist, 1) } };
+    }
+
+    private static XYZ CenterOf(Element e)
+    {
+        var bb = e.get_BoundingBox(null);
+        if (bb != null) return (bb.Min + bb.Max) * 0.5;
+        if (e.Location is LocationPoint lp) return lp.Point;
+        if (e.Location is LocationCurve lc) return lc.Curve.Evaluate(0.5, true);
+        return XYZ.Zero;
+    }
+
+    public static object GetBoundingBox(UIApplication app, long id)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var e = doc.GetElement(new ElementId(id));
+        if (e == null) throw new InvalidOperationException("Element not found: " + id);
+        var bb = e.get_BoundingBox(null);
+        if (bb == null) throw new InvalidOperationException("No bounding box for element: " + id);
+        return new Dictionary<string, object>
+        {
+            { "min", new[] { bb.Min.X * 304.8, bb.Min.Y * 304.8, bb.Min.Z * 304.8 } },
+            { "max", new[] { bb.Max.X * 304.8, bb.Max.Y * 304.8, bb.Max.Z * 304.8 } },
+        };
+    }
+
+    public static object ListCategories(UIApplication app)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<string>();
+        foreach (Category c in doc.Settings.Categories)
+            items.Add(c.Name);
+        items.Sort();
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    public static object CreateView3D(UIApplication app, string name)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        using (var tx = new Transaction(doc, "Create 3D View"))
+        {
+            tx.Start();
+            var vft = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType))
+                .Cast<ViewFamilyType>().FirstOrDefault(v => v.ViewFamily == ViewFamily.ThreeDimensional);
+            if (vft == null) throw new InvalidOperationException("No 3D view family type");
+            var view = View3D.CreateIsometric(doc, vft.Id);
+            if (!string.IsNullOrWhiteSpace(name)) view.Name = name;
+            tx.Commit();
+            return new Dictionary<string, object> { { "id", view.Id.Value }, { "name", view.Name } };
+        }
+    }
+
+    public static object SetActiveView(UIApplication app, string viewNameOrId)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        View view = null;
+        if (long.TryParse(viewNameOrId, out var vid))
+            view = doc.GetElement(new ElementId(vid)) as View;
+        if (view == null)
+            view = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>().FirstOrDefault(v => v.Name == viewNameOrId);
+        if (view == null) throw new InvalidOperationException("View not found: " + viewNameOrId);
+        uidoc.ActiveView = view;
+        return new Dictionary<string, object> { { "ok", true }, { "id", view.Id.Value }, { "name", view.Name } };
+    }
+
 }

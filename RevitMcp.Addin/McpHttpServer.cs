@@ -265,6 +265,147 @@ internal class McpHttpServer
                     WriteJson(ctx, 200, Ok(true, data, null));
                     return;
                 }
+
+            case "POST /create_grid":
+                {
+                    var body = ReadBody(req);
+                    var name = body.Value<string>("name") ?? "";
+                    var start = body["start_mm"] != null ? body["start_mm"].ToObject<double[]>() : new[] { 0.0, 0.0 };
+                    var end = body["end_mm"] != null ? body["end_mm"].ToObject<double[]>() : new[] { 0.0, 0.0 };
+                    var data = _handler.Run(app => McpOps.CreateGrid(app, name, start, end), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /grids":
+                {
+                    var data = _handler.Run(app => McpOps.ListGrids(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /create_floor":
+                {
+                    var body = ReadBody(req);
+                    var levelId = body.Value<long>("level_id");
+                    var boundary = body["boundary_mm"] != null ? body["boundary_mm"].ToObject<double[][]>() : null;
+                    var floorType = body.Value<string>("floor_type") ?? "";
+                    var data = _handler.Run(app => McpOps.CreateFloor(app, levelId, boundary, floorType), 180000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /floors":
+                {
+                    var data = _handler.Run(app => McpOps.ListFloors(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /create_ceiling":
+                {
+                    var body = ReadBody(req);
+                    var levelId = body.Value<long>("level_id");
+                    var boundary = body["boundary_mm"] != null ? body["boundary_mm"].ToObject<double[][]>() : null;
+                    var ceilingType = body.Value<string>("ceiling_type") ?? "";
+                    var data = _handler.Run(app => McpOps.CreateCeiling(app, levelId, boundary, ceilingType), 180000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /ceilings":
+                {
+                    var data = _handler.Run(app => McpOps.ListCeilings(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /create_roof":
+                {
+                    var body = ReadBody(req);
+                    var levelId = body.Value<long>("level_id");
+                    var boundary = body["boundary_mm"] != null ? body["boundary_mm"].ToObject<double[][]>() : null;
+                    var roofType = body.Value<string>("roof_type") ?? "";
+                    var data = _handler.Run(app => McpOps.CreateRoof(app, levelId, boundary, roofType), 180000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /roofs":
+                {
+                    var data = _handler.Run(app => McpOps.ListRoofs(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /move_element":
+                {
+                    var body = ReadBody(req);
+                    var id = body.Value<long>("element_id");
+                    var delta = body["delta_mm"] != null ? body["delta_mm"].ToObject<double[]>() : new[] { 0.0, 0.0, 0.0 };
+                    var data = _handler.Run(app => McpOps.MoveElement(app, id, delta), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /rotate_element":
+                {
+                    var body = ReadBody(req);
+                    var id = body.Value<long>("element_id");
+                    var center = body["center_mm"] != null ? body["center_mm"].ToObject<double[]>() : new[] { 0.0, 0.0, 0.0 };
+                    var angle = body.Value<double>("angle_deg");
+                    var data = _handler.Run(app => McpOps.RotateElement(app, id, center, angle), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /copy_element":
+                {
+                    var body = ReadBody(req);
+                    var id = body.Value<long>("element_id");
+                    var delta = body["delta_mm"] != null ? body["delta_mm"].ToObject<double[]>() : new[] { 0.0, 0.0, 0.0 };
+                    var data = _handler.Run(app => McpOps.CopyElement(app, id, delta), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /mirror_element":
+                {
+                    var body = ReadBody(req);
+                    var id = body.Value<long>("element_id");
+                    var axis = body["axis_mm"] != null ? body["axis_mm"].ToObject<double[][]>() : null;
+                    var data = _handler.Run(app => McpOps.MirrorElement(app, id, axis), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /measure_distance":
+                {
+                    var q = ParseQuery(req.Url.Query);
+                    var id1 = GetInt(q, "id1", 0);
+                    var id2 = GetInt(q, "id2", 0);
+                    var data = _handler.Run(app => McpOps.MeasureDistance(app, id1, id2), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /bounding_box":
+                {
+                    var q = ParseQuery(req.Url.Query);
+                    var id = GetInt(q, "id", 0);
+                    var data = _handler.Run(app => McpOps.GetBoundingBox(app, id), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /categories":
+                {
+                    var data = _handler.Run(app => McpOps.ListCategories(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /create_view_3d":
+                {
+                    var body = ReadBody(req);
+                    var name = body.Value<string>("name") ?? "";
+                    var data = _handler.Run(app => McpOps.CreateView3D(app, name), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /set_active_view":
+                {
+                    var body = ReadBody(req);
+                    var view = body.Value<string>("view") ?? "";
+                    var data = _handler.Run(app => McpOps.SetActiveView(app, view), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
             default:
                 WriteJson(ctx, 404, Ok(false, null, "Unknown route: " + req.HttpMethod + " " + path));
                 return;
