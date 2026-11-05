@@ -186,6 +186,13 @@ TOOLS = [
     {"name": "revit_backup_document", "description": "Save a backup copy of the document.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}},
     {"name": "revit_dry_run", "description": "Plan an operation without executing.", "inputSchema": {"type": "object", "properties": {"operation": {"type": "string"}, "args": {"type": "object"}}, "required": ["operation"]}},
     {"name": "revit_undo_last", "description": "Undo last (best-effort note).", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_list_pipe_types", "description": "List pipe types.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_list_piping_systems", "description": "List piping systems.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_create_pipe", "description": "Create a pipe.", "inputSchema": {"type": "object", "properties": {"system_type": {"type": "string"}, "pipe_type": {"type": "string"}, "level_id": {"type": "integer"}, "start_mm": {"type": "array"}, "end_mm": {"type": "array"}, "diameter_mm": {"type": "number"}}, "required": ["level_id", "start_mm", "end_mm"]}},
+    {"name": "revit_connect_pipes", "description": "Connect two pipes.", "inputSchema": {"type": "object", "properties": {"id1": {"type": "integer"}, "id2": {"type": "integer"}}, "required": ["id1", "id2"]}},
+    {"name": "revit_list_duct_types", "description": "List duct types.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_list_mechanical_systems", "description": "List mechanical systems.", "inputSchema": {"type": "object", "properties": {}}},
+    {"name": "revit_create_duct", "description": "Create a duct.", "inputSchema": {"type": "object", "properties": {"system_type": {"type": "string"}, "duct_type": {"type": "string"}, "level_id": {"type": "integer"}, "start_mm": {"type": "array"}, "end_mm": {"type": "array"}, "width_mm": {"type": "number"}, "height_mm": {"type": "number"}}, "required": ["level_id", "start_mm", "end_mm"]}},
 ]
 
 
@@ -315,6 +322,20 @@ def tool_call(name, args):
         return _api("POST", "/dry_run", {"operation": args.get("operation"), "args": args.get("args")}, timeout=60)
     if name == "revit_undo_last":
         return _api("POST", "/undo_last", {}, timeout=60)
+    if name == "revit_list_pipe_types":
+        return _api("GET", "/pipe_types", timeout=60)
+    if name == "revit_list_piping_systems":
+        return _api("GET", "/piping_systems", timeout=60)
+    if name == "revit_create_pipe":
+        return _api("POST", "/create_pipe", {"system_type": args.get("system_type"), "pipe_type": args.get("pipe_type"), "level_id": args.get("level_id"), "start_mm": args.get("start_mm"), "end_mm": args.get("end_mm"), "diameter_mm": args.get("diameter_mm", 0)}, timeout=120)
+    if name == "revit_connect_pipes":
+        return _api("POST", "/connect_pipes", {"id1": args.get("id1"), "id2": args.get("id2")}, timeout=120)
+    if name == "revit_list_duct_types":
+        return _api("GET", "/duct_types", timeout=60)
+    if name == "revit_list_mechanical_systems":
+        return _api("GET", "/mechanical_systems", timeout=60)
+    if name == "revit_create_duct":
+        return _api("POST", "/create_duct", {"system_type": args.get("system_type"), "duct_type": args.get("duct_type"), "level_id": args.get("level_id"), "start_mm": args.get("start_mm"), "end_mm": args.get("end_mm"), "width_mm": args.get("width_mm", 0), "height_mm": args.get("height_mm", 0)}, timeout=120)
     raise ValueError("unknown tool: %s" % name)
 
 

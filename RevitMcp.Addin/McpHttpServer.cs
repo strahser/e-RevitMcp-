@@ -490,6 +490,67 @@ internal class McpHttpServer
                     WriteJson(ctx, 200, Ok(true, data, null));
                     return;
                 }
+
+            case "GET /pipe_types":
+                {
+                    var data = _handler.Run(app => McpOps.ListPipeTypes(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /piping_systems":
+                {
+                    var data = _handler.Run(app => McpOps.ListPipingSystems(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /create_pipe":
+                {
+                    var body = ReadBody(req);
+                    var systemType = body.Value<string>("system_type") ?? "";
+                    var pipeType = body.Value<string>("pipe_type") ?? "";
+                    var levelId = body.Value<long>("level_id");
+                    var start = body["start_mm"] != null ? body["start_mm"].ToObject<double[]>() : new[] { 0.0, 0.0, 0.0 };
+                    var end = body["end_mm"] != null ? body["end_mm"].ToObject<double[]>() : new[] { 0.0, 0.0, 0.0 };
+                    var diameter = body.Value<double>("diameter_mm");
+                    var data = _handler.Run(app => McpOps.CreatePipe(app, systemType, pipeType, levelId, start, end, diameter), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /connect_pipes":
+                {
+                    var body = ReadBody(req);
+                    var id1 = body.Value<long>("id1");
+                    var id2 = body.Value<long>("id2");
+                    var data = _handler.Run(app => McpOps.ConnectPipes(app, id1, id2), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /duct_types":
+                {
+                    var data = _handler.Run(app => McpOps.ListDuctTypes(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "GET /mechanical_systems":
+                {
+                    var data = _handler.Run(app => McpOps.ListMechanicalSystems(app), 60000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
+            case "POST /create_duct":
+                {
+                    var body = ReadBody(req);
+                    var systemType = body.Value<string>("system_type") ?? "";
+                    var ductType = body.Value<string>("duct_type") ?? "";
+                    var levelId = body.Value<long>("level_id");
+                    var start = body["start_mm"] != null ? body["start_mm"].ToObject<double[]>() : new[] { 0.0, 0.0, 0.0 };
+                    var end = body["end_mm"] != null ? body["end_mm"].ToObject<double[]>() : new[] { 0.0, 0.0, 0.0 };
+                    var width = body.Value<double>("width_mm");
+                    var height = body.Value<double>("height_mm");
+                    var data = _handler.Run(app => McpOps.CreateDuct(app, systemType, ductType, levelId, start, end, width, height), 120000);
+                    WriteJson(ctx, 200, Ok(true, data, null));
+                    return;
+                }
             default:
                 WriteJson(ctx, 404, Ok(false, null, "Unknown route: " + req.HttpMethod + " " + path));
                 return;

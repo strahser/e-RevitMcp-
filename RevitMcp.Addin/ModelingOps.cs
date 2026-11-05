@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Architecture;
+using Autodesk.Revit.DB.Mechanical;
+using Autodesk.Revit.DB.Plumbing;
 using Autodesk.Revit.UI;
 
 namespace RevitMcp;
@@ -928,6 +930,153 @@ internal static partial class McpOps
         // Revit API does not expose a direct programmatic Undo for committed transactions.
         // Each RevitMcp operation is its own transaction; undo via Revit UI (Ctrl+Z) if needed.
         return new Dictionary<string, object> { { "ok", false }, { "note", "Per-operation transactions are already committed; use Revit UI Undo (Ctrl+Z) to revert. For safety, use backup_document before destructive ops." } };
+    }
+
+    // ---------- MEP: Pipes ----------
+    public static object ListPipeTypes(UIApplication app)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<Dictionary<string, object>>();
+        foreach (PipeType pt in new FilteredElementCollector(doc).OfClass(typeof(PipeType)))
+        {
+            items.Add(new Dictionary<string, object> { { "id", pt.Id.Value }, { "name", pt.Name } });
+        }
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    public static object ListPipingSystems(UIApplication app)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<Dictionary<string, object>>();
+        foreach (PipingSystemType pst in new FilteredElementCollector(doc).OfClass(typeof(PipingSystemType)))
+        {
+            items.Add(new Dictionary<string, object>
+            {
+                { "id", pst.Id.Value },
+                { "name", pst.Name },
+                { "classification", pst.SystemClassification.ToString() },
+            });
+        }
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    public static object CreatePipe(UIApplication app, string systemTypeName, string pipeTypeName, long levelId, double[] startMm, double[] endMm, double diameterMm)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var level = doc.GetElement(new ElementId(levelId)) as Level;
+        if (level == null) throw new InvalidOperationException("Level not found: " + levelId);
+
+        PipingSystemType sysType = null;
+        if (!string.IsNullOrWhiteSpace(systemTypeName))
+            sysType = new FilteredElementCollector(doc).OfClass(typeof(PipingSystemType)).Cast<PipingSystemType>().FirstOrDefault(t => t.Name == systemTypeName);
+        if (sysType == null) sysType = new FilteredElementCollector(doc).OfClass(typeof(PipingSystemType)).Cast<PipingSystemType>().FirstOrDefault();
+        if (sysType == null) throw new InvalidOperationException("No piping system type in document");
+
+        PipeType pipeType = null;
+        if (!string.IsNullOrWhiteSpace(pipeTypeName))
+            pipeType = new FilteredElementCollector(doc).OfClass(typeof(PipeType)).Cast<PipeType>().FirstOrDefault(t => t.Name == pipeTypeName);
+        if (pipeType == null) pipeType = new FilteredElementCollector(doc).OfClass(typeof(PipeType)).Cast<PipeType>().FirstOrDefault();
+        if (pipeType == null) throw new InvalidOperationException("No pipe type in document");
+
+        using (var tx = new Transaction(doc, "Create Pipe"))
+        {
+            tx.Start();
+            var s = new XYZ(startMm[0] / 304.8, startMm[1] / 304.8, (startMm.Length > 2 ? startMm[2] : 0) / 304.8);
+            var e = new XYZ(endMm[0] / 304.8, endMm[1] / 304.8, (endMm.Length > 2 ? endMm[2] : 0) / 304.8);
+            var pipe = Pipe.Create(doc, sysType.Id, pipeType.Id, level.Id, s, e);
+            if (diameterMm > 0)
+            {
+                var dp = pipe.get_Parameter(BuiltInParameter.RBS_PIPE_DIAMETER_PARAM);
+                if (dp != null && !dp.IsReadOnly) dp.Set(diameterMm / 304.8);
+            }
+            tx.Commit();
+            return new Dictionary<string, object> { { "id", pipe.Id.Value }, { "uniqueId", pipe.UniqueId } };
+        }
+    }
+
+    public static object ConnectPipes(UIApplication app, long id1, long id2)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var p1 = doc.GetElement(new ElementId(id1)) as Pipe;
+        var p2 = doc.GetElement(new ElementId(id2)) as Pipe;
+        if (p1 == null || p2 == null) throw new InvalidOperationException("Pipe not found");
+        using (var tx = new Transaction(doc, "Connect Pipes"))
+        {
+            tx.Start();
+            // find open connectors
+            Connector c1 = null, c2 = null;
+            foreach (Connector c in p1.ConnectorManager.Connectors)
+                if (c.ConnectorType == ConnectorType.End && !c.IsConnected) { c1 = c; break; }
+            foreach (Connector c in p2.ConnectorManager.Connectors)
+                if (c.ConnectorType == ConnectorType.End && !c.IsConnected) { c2 = c; break; }
+            if (c1 == null || c2 == null) throw new InvalidOperationException("No open end connectors");
+            c1.ConnectTo(c2);
+            tx.Commit();
+        }
+        return new Dictionary<string, object> { { "ok", true } };
+    }
+
+    // ---------- MEP: Ducts ----------
+    public static object ListDuctTypes(UIApplication app)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<Dictionary<string, object>>();
+        foreach (DuctType dt in new FilteredElementCollector(doc).OfClass(typeof(DuctType)))
+            items.Add(new Dictionary<string, object> { { "id", dt.Id.Value }, { "name", dt.Name } });
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    public static object ListMechanicalSystems(UIApplication app)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var items = new List<Dictionary<string, object>>();
+        foreach (MechanicalSystemType mst in new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystemType)))
+            items.Add(new Dictionary<string, object> { { "id", mst.Id.Value }, { "name", mst.Name }, { "classification", mst.SystemClassification.ToString() } });
+        return new Dictionary<string, object> { { "count", items.Count }, { "items", items } };
+    }
+
+    public static object CreateDuct(UIApplication app, string systemTypeName, string ductTypeName, long levelId, double[] startMm, double[] endMm, double widthMm, double heightMm)
+    {
+        var uidoc = app.ActiveUIDocument;
+        if (uidoc == null) throw new InvalidOperationException("No active document");
+        var doc = uidoc.Document;
+        var level = doc.GetElement(new ElementId(levelId)) as Level;
+        if (level == null) throw new InvalidOperationException("Level not found: " + levelId);
+
+        MechanicalSystemType sysType = null;
+        if (!string.IsNullOrWhiteSpace(systemTypeName))
+            sysType = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystemType)).Cast<MechanicalSystemType>().FirstOrDefault(t => t.Name == systemTypeName);
+        if (sysType == null) sysType = new FilteredElementCollector(doc).OfClass(typeof(MechanicalSystemType)).Cast<MechanicalSystemType>().FirstOrDefault();
+        if (sysType == null) throw new InvalidOperationException("No mechanical system type in document");
+
+        DuctType ductType = null;
+        if (!string.IsNullOrWhiteSpace(ductTypeName))
+            ductType = new FilteredElementCollector(doc).OfClass(typeof(DuctType)).Cast<DuctType>().FirstOrDefault(t => t.Name == ductTypeName);
+        if (ductType == null) ductType = new FilteredElementCollector(doc).OfClass(typeof(DuctType)).Cast<DuctType>().FirstOrDefault();
+        if (ductType == null) throw new InvalidOperationException("No duct type in document");
+
+        using (var tx = new Transaction(doc, "Create Duct"))
+        {
+            tx.Start();
+            var s = new XYZ(startMm[0] / 304.8, startMm[1] / 304.8, (startMm.Length > 2 ? startMm[2] : 0) / 304.8);
+            var e = new XYZ(endMm[0] / 304.8, endMm[1] / 304.8, (endMm.Length > 2 ? endMm[2] : 0) / 304.8);
+            var duct = Duct.Create(doc, sysType.Id, ductType.Id, level.Id, s, e);
+            // width/height задаются типом воздуховода; при необходимости — через set_instance_param по имени параметра типа/экземпляра.
+            tx.Commit();
+            return new Dictionary<string, object> { { "id", duct.Id.Value }, { "uniqueId", duct.UniqueId } };
+        }
     }
 
 }
